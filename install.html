@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<script src="//api.bitrix24.com/api/v1/"></script>
+<script>
+BX24.init(function() {
+  BX24.install(function() {
+    var handlerUrl = 'https://markinscompany-commits.github.io/beauty-clinic-widget/booking.html';
+    BX24.callMethod(
+      'placement.bind',
+      {
+        'PLACEMENT': 'CRM_DEAL_DETAIL_TAB',
+        'HANDLER': handlerUrl,
+        'LANG_ALL': {
+          'ru': { 'TITLE': 'Запись на приём' },
+          'en': { 'TITLE': 'Book appointment' }
+        }
+      },
+      function(result) {
+        if (result.error()) {
+          document.getElementById('status').textContent = 'Ошибка: ' + (result.error().ex ? result.error().ex.error_description : result.error());
+        } else {
+          document.getElementById('status').textContent = 'Готово! Откройте любую сделку.';
+        }
+        BX24.installFinish();
+      }
+    );
+  });
+});
+</script>
+</head>
+<body>
+<p id="status">Установка приложения...</p>
+</body>
+</html>
