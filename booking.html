@@ -614,9 +614,9 @@ async function checkPlacementAndLoad() {
     var placementCode = placement.placement || '';
     var dealId = placement.options && placement.options.ID;
 
-    // If opened from left menu (no deal context) — show instructions
+    // If opened from left menu (no deal context) — register placement and show instructions
     if (!dealId) {
-      showNotInDealMessage();
+      registerPlacementIfNeeded();
       return;
     }
 
@@ -629,13 +629,50 @@ async function checkPlacementAndLoad() {
   }
 }
 
-function showNotInDealMessage() {
+function registerPlacementIfNeeded() {
   var app = document.getElementById('app');
-  app.innerHTML = '<div class="screen-center">'
-    + '<div style="font-size:48px">\u2139\uFE0F</div>'
-    + '<div style="font-weight:600;font-size:16px">Виджет записи на приём</div>'
-    + '<div style="color:var(--text-secondary);max-width:400px">Откройте карточку сделки и перейдите на вкладку<br><b>«Запись на приём»</b></div>'
-    + '</div>';
+  app.innerHTML = '<div class="screen-center"><div class="spinner"></div><div>Регистрация вкладки...</div></div>';
+
+  BX24.callMethod('placement.list', {}, function(listResult) {
+    var placements = (listResult.data && listResult.data()) || [];
+    var alreadyRegistered = false;
+    if (Array.isArray(placements)) {
+      alreadyRegistered = placements.some(function(p) { return p.placement === 'CRM_DEAL_DETAIL_TAB'; });
+    }
+
+    if (alreadyRegistered) {
+      app.innerHTML = '<div class="screen-center">'
+        + '<div style="font-size:48px">\u2705</div>'
+        + '<div style="font-weight:600;font-size:16px">Вкладка уже зарегистрирована</div>'
+        + '<div style="color:var(--text-secondary);max-width:400px">Откройте любую сделку — вкладка<br><b>«Запись на приём»</b> уже там.</div>'
+        + '</div>';
+      return;
+    }
+
+    var handlerUrl = window.location.href.split('?')[0].split('#')[0];
+    BX24.callMethod('placement.bind', {
+      PLACEMENT: 'CRM_DEAL_DETAIL_TAB',
+      HANDLER: handlerUrl,
+      LANG_ALL: {
+        ru: { TITLE: 'Запись на приём' },
+        en: { TITLE: 'Book appointment' }
+      }
+    }, function(result) {
+      if (result.error()) {
+        app.innerHTML = '<div class="screen-center">'
+          + '<div style="font-size:48px">\u26A0\uFE0F</div>'
+          + '<div style="font-weight:600;font-size:16px">Ошибка регистрации</div>'
+          + '<div style="color:var(--text-secondary);max-width:400px">' + (result.error().ex ? result.error().ex.error_description : 'Unknown error') + '</div>'
+          + '</div>';
+      } else {
+        app.innerHTML = '<div class="screen-center">'
+          + '<div style="font-size:48px">\u2705</div>'
+          + '<div style="font-weight:600;font-size:16px">Вкладка зарегистрирована!</div>'
+          + '<div style="color:var(--text-secondary);max-width:400px">Откройте любую сделку — во вкладках появится<br><b>«Запись на приём»</b></div>'
+          + '</div>';
+      }
+    });
+  });
 }
 
 async function loadDealData() {
