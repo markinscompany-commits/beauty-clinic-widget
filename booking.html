@@ -492,8 +492,8 @@ body {
 
 // === CONFIG ===
 var PROXY_URL = 'https://markins.app.n8n.cloud/webhook/beauty-clinic';
-var COMPANY_MAP = { '0': '671663' }; // CATEGORY_ID → YC company_id
-var BRANCH_NAMES = { '0': 'Махачкала' };
+var COMPANY_MAP = { '0': '671663', '3': '816356' }; // CATEGORY_ID → YC company_id
+var BRANCH_NAMES = { '0': 'Махачкала', '3': 'Грозный' };
 var MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 var WEEKDAYS_RU = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 
@@ -611,22 +611,59 @@ function init() {
 async function checkPlacementAndLoad() {
   try {
     var placement = await bx24PlacementInfo();
-    var placementCode = placement.placement || '';
-    var dealId = placement.options && placement.options.ID;
+    var dealId = placement.options && (placement.options.ID || placement.options.id);
 
-    // If opened from left menu (no deal context) — register placement and show instructions
+    // If opened from left menu (no deal context) — show reinstall UI
     if (!dealId) {
-      registerPlacementIfNeeded();
+      showReinstallScreen();
       return;
     }
 
     // Normal flow — load deal data
-    state.dealId = dealId;
+    state.dealId = String(dealId);
     await loadDealData();
   } catch (err) {
-    // Likely opened outside deal card
-    showNotInDealMessage();
+    state.step = -1;
+    state.errorMsg = 'Ошибка: ' + err.message;
+    render();
   }
+}
+
+function showReinstallScreen() {
+  var app = document.getElementById('app');
+  app.innerHTML = '<div class="screen-center">'
+    + '<div style="font-size:48px">⚙️</div>'
+    + '<div style="font-weight:600;font-size:16px;margin-bottom:8px">Панель управления виджетом</div>'
+    + '<div style="color:var(--text-secondary);max-width:380px;text-align:center;margin-bottom:20px">Если в карточке сделки появились две вкладки «Запись на приём» — нажмите кнопку ниже для исправления.</div>'
+    + '<button onclick="doReinstall()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:15px;cursor:pointer;font-weight:600">Исправить дублирующуюся вкладку</button>'
+    + '<div id="reinstall-status" style="margin-top:16px;color:var(--text-secondary);font-size:14px"></div>'
+    + '</div>';
+}
+
+function doReinstall() {
+  var btn = document.querySelector('[onclick="doReinstall()"]');
+  var status = document.getElementById('reinstall-status');
+  if (btn) btn.disabled = true;
+  status.textContent = 'Удаляю старые вкладки...';
+
+  BX24.callMethod('placement.unbind', { PLACEMENT: 'CRM_DEAL_DETAIL_TAB' }, function() {
+    status.textContent = 'Регистрирую одну вкладку...';
+    BX24.callMethod('placement.bind', {
+      PLACEMENT: 'CRM_DEAL_DETAIL_TAB',
+      HANDLER: 'https://widget-five-alpha.vercel.app',
+      LANG_ALL: {
+        ru: { TITLE: 'Запись на приём' },
+        en: { TITLE: 'Book appointment' }
+      }
+    }, function(result) {
+      if (result.error()) {
+        status.textContent = 'Ошибка: ' + (result.error().ex ? result.error().ex.error_description : JSON.stringify(result.error()));
+        if (btn) btn.disabled = false;
+      } else {
+        status.innerHTML = '<span style="color:green;font-weight:600">✓ Готово! Обновите страницу со сделкой — будет одна вкладка.</span>';
+      }
+    });
+  });
 }
 
 function registerPlacementIfNeeded() {
@@ -684,14 +721,14 @@ async function loadDealData() {
 
     if (!state.companyId) {
       state.step = -1;
-      state.errorMsg = 'Филиал Грозный пока не подключен к виджету записи. Воронка Грозного будет настроена после завершения Махачкалы.';
+      state.errorMsg = 'Филиал воронки (CATEGORY_ID=' + state.categoryId + ') не подключен к виджету записи. Обратитесь к интегратору.';
       render();
       return;
     }
     state.branchName = BRANCH_NAMES[state.categoryId] || 'Филиал';
 
     var contactId = deal.CONTACT_ID;
-    if (!contactId) {
+    if (!contactId || parseInt(contactId) <= 0) {
       state.step = -1;
       state.errorMsg = 'К сделке не привязан контакт. Привяжите контакт к сделке и обновите страницу.';
       render();
